@@ -1,6 +1,6 @@
 # 🎤 InterviewAI — AI Mock Interview Platform
 
-A full-featured AI-powered mock interview platform built with React and the Anthropic Claude API.
+A full-featured AI-powered mock interview platform built with React and the groq API key.
 
 ---
 
@@ -29,24 +29,18 @@ npm -v
 ```
 
 ### Step 2 — Open the project in VS Code
-1. Extract the ZIP file to a folder (e.g. `interviewai`)
+1. Download All  files from a folder (e.g. `interviewai`)
 2. Open VS Code
 3. Go to **File → Open Folder** → select the `interviewai` folder
 
-### Step 3 — Get your Anthropic API Key
-1. Go to https://console.anthropic.com
+### Step 3 — Get your Groq API Key
+1. Go to https://console.groq.com
 2. Sign up (free tier available)
 3. Click **API Keys** → **Create Key**
 4. Copy the key (starts with `sk-ant-...`)
 
 ### Step 4 — Add your API Key
-Open the file `src/constants.js` and replace:
-```js
-export const ANTHROPIC_API_KEY = 'YOUR_ANTHROPIC_API_KEY_HERE';
-```
-with your actual key:
-```js
-export const ANTHROPIC_API_KEY = 'sk-ant-api03-xxxxxxxxxx';
+generate Api key from groq Ai and paste on it.
 ```
 
 ### Step 5 — Install dependencies
