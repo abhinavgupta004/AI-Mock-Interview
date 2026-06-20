@@ -135,16 +135,7 @@ This creates a `build/` folder you can deploy to Vercel, Netlify, or GitHub Page
 
 ---
 
-## ⚡ Quick Deploy to Vercel (Free)
 
-1. Push your project to GitHub
-2. Go to https://vercel.com and sign up
-3. Click **New Project** → Import your GitHub repo
-4. Add environment variable: `REACT_APP_ANTHROPIC_KEY=your_key_here`
-5. Update `src/utils/claude.js` to use `process.env.REACT_APP_ANTHROPIC_KEY`
-6. Click **Deploy** 🚀
-
----
 
 ## 📝 Tech Stack
 
@@ -154,6 +145,5 @@ This creates a `build/` folder you can deploy to Vercel, Netlify, or GitHub Page
 - **localStorage** — Data persistence
 - **CSS-in-JS** — Inline styles + global CSS
 
----
 
-Made with ❤️ using React + Anthropic Claude API
+
