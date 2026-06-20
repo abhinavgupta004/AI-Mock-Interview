@@ -41,6 +41,7 @@ npm -v
 
 ### Step 4 — Add your API Key
 generate Api key from groq Ai and paste on it.
+export const GROQ_API_KEY = 'create your own api key';
 ```
 
 ### Step 5 — Install dependencies
