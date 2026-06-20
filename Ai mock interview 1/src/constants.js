@@ -15,4 +15,5 @@ export const MAX_QUESTIONS = 5;
 
 // ⚠️  IMPORTANT: Replace with your real Anthropic API key
 // Get one free at https://console.anthropic.com
-export const ANTHROPIC_API_KEY = 'YOUR_ANTHROPIC_API_KEY_HERE';
+export const GROQ_API_KEY = process.env.REACT_APP_GROQ_KEY || '';
+export const GROQ_MODEL = 'llama-3.3-70b-versatile';
