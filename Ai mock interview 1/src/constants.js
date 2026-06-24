@@ -13,7 +13,6 @@ export const LEVELS = ['Fresher', 'Junior', 'Mid-level', 'Senior', 'Staff/Princi
 
 export const MAX_QUESTIONS = 5;
 
-// ⚠️  IMPORTANT: Replace with your real Anthropic API key
-// Get one free at https://console.anthropic.com
+
 export const GROQ_API_KEY = process.env.REACT_APP_GROQ_KEY || '';
 export const GROQ_MODEL = 'llama-3.3-70b-versatile';
