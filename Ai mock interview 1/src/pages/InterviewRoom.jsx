@@ -19,6 +19,7 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
   const [voiceMode, setVoiceMode] = useState(true);   // AI speaks questions aloud
   const [speaking, setSpeaking] = useState(false);     // currently speaking
   const [voices, setVoices] = useState([]);
+  const [started, setStarted] = useState(false);       // gated behind user click for autoplay policy
 
   const chatRef = useRef(null);
   const recRef = useRef(null);
@@ -64,6 +65,7 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
   const speak = (text) => {
     if (!ttsSupported || !voiceMode) return;
     window.speechSynthesis.cancel();
+    // Strip markdown-ish characters so they aren't read aloud
     const clean = text.replace(/[*_#`]/g, '');
     const utter = new SpeechSynthesisUtterance(clean);
     const v = pickVoice();
@@ -74,7 +76,16 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
     utter.onend = () => setSpeaking(false);
     utter.onerror = () => setSpeaking(false);
     utterRef.current = utter;
-    window.speechSynthesis.speak(utter);
+    // Chrome sometimes needs a tick after cancel() before speak() actually fires
+    setTimeout(() => window.speechSynthesis.speak(utter), 50);
+  };
+
+  // Unlocks the browser's speech engine — must be called directly inside a click handler
+  const unlockSpeech = () => {
+    if (!ttsSupported) return;
+    const warm = new SpeechSynthesisUtterance('');
+    window.speechSynthesis.speak(warm);
+    window.speechSynthesis.cancel();
   };
 
   const stopSpeaking = () => {
@@ -82,8 +93,9 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
     setSpeaking(false);
   };
 
-  // Start interview on mount
+  // Start interview only after user clicks "Start" (required for audio autoplay)
   useEffect(() => {
+    if (!started) return;
     (async () => {
       setLoading(true);
       setAiSpeak(true);
@@ -105,7 +117,7 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
       setAiSpeak(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [started]);
 
   const submit = async () => {
     if (!input.trim() || loading) return;
@@ -201,6 +213,45 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
     if (lastAi) speak(lastAi.text);
   };
 
+  const handleStartClick = () => {
+    unlockSpeech();   // must run inside the click handler itself, synchronously
+    setStarted(true);
+  };
+
+  // Pre-start screen — required so the browser allows audio playback later
+  if (!started) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        height: '100%', maxWidth: 480, margin: '0 auto', textAlign: 'center', gap: 18,
+      }}>
+        <span style={{ fontSize: 44 }}>{role?.icon}</span>
+        <div>
+          <div className="sg" style={{ fontSize: 20, fontWeight: 700, color: '#E2EAF4', marginBottom: 6 }}>
+            {role?.label} Interview
+          </div>
+          <div style={{ fontSize: 13, color: '#8892A4' }}>{level} · {MAX_QUESTIONS} questions</div>
+        </div>
+        <p style={{ fontSize: 13.5, color: '#8892A4', lineHeight: 1.6, maxWidth: 360 }}>
+          {ttsSupported
+            ? 'The interviewer will ask questions out loud. Make sure your sound is on, then click below to begin.'
+            : 'Your browser does not support voice playback — questions will be shown as text.'}
+        </p>
+        <button onClick={handleStartClick} className="pbtn sg" style={{
+          background: 'linear-gradient(135deg,#0060CC,#00D4FF)',
+          border: 'none', borderRadius: 12, padding: '14px 36px',
+          color: '#fff', fontWeight: 700, fontSize: 15,
+        }}>
+          {ttsSupported ? '🔊 Start Interview' : 'Start Interview →'}
+        </button>
+        <button onClick={onExit} className="gbtn" style={{
+          background: 'transparent', border: '1px solid #1E3050',
+          borderRadius: 8, padding: '7px 16px', color: '#8892A4', fontSize: 12,
+        }}>Back</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', maxWidth: 820, margin: '0 auto' }}>
       {/* Header */}
@@ -226,6 +277,7 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
             ))}
           </div>
 
+          {/* Voice mode toggle */}
           {ttsSupported && (
             <button
               onClick={toggleVoiceMode}
