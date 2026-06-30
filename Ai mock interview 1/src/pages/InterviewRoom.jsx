@@ -16,17 +16,71 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
   const [recording, setRecording] = useState(false);
   const [done, setDone] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [voiceMode, setVoiceMode] = useState(true);   // AI speaks questions aloud
+  const [speaking, setSpeaking] = useState(false);     // currently speaking
+  const [voices, setVoices] = useState([]);
 
   const chatRef = useRef(null);
   const recRef = useRef(null);
+  const utterRef = useRef(null);
   const role = ROLES.find((r) => r.id === roleId);
+
+  const ttsSupported = 'speechSynthesis' in window;
+  const sttSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: 99999, behavior: 'smooth' });
   }, [msgs, feedback]);
 
+  // Load available voices (some browsers load them async)
+  useEffect(() => {
+    if (!ttsSupported) return;
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Stop any speech when leaving the room
+  useEffect(() => {
+    return () => { if (ttsSupported) window.speechSynthesis.cancel(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const addMsg = (r, text, label = '') =>
     setMsgs((p) => [...p, { role: r, text, label, id: Date.now() + Math.random() }]);
+
+  // Pick a natural-sounding English voice if available
+  const pickVoice = () => {
+    if (!voices.length) return null;
+    const preferred = voices.find(v => /en-US|en-GB/.test(v.lang) && /Google|Natural|Online/i.test(v.name))
+      || voices.find(v => /en-US/.test(v.lang))
+      || voices.find(v => v.lang.startsWith('en'))
+      || voices[0];
+    return preferred;
+  };
+
+  const speak = (text) => {
+    if (!ttsSupported || !voiceMode) return;
+    window.speechSynthesis.cancel();
+    const clean = text.replace(/[*_#`]/g, '');
+    const utter = new SpeechSynthesisUtterance(clean);
+    const v = pickVoice();
+    if (v) utter.voice = v;
+    utter.rate = 1;
+    utter.pitch = 1;
+    utter.onstart = () => setSpeaking(true);
+    utter.onend = () => setSpeaking(false);
+    utter.onerror = () => setSpeaking(false);
+    utterRef.current = utter;
+    window.speechSynthesis.speak(utter);
+  };
+
+  const stopSpeaking = () => {
+    if (ttsSupported) window.speechSynthesis.cancel();
+    setSpeaking(false);
+  };
 
   // Start interview on mount
   useEffect(() => {
@@ -37,11 +91,13 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
       try {
         const sys = `You are a professional technical interviewer at a top tech company, hiring for ${role?.label} (${level} level).
 Ask ONE question at a time. Start with a warm 1-sentence greeting then ask Question 1.
-Make questions progressively harder and role-specific. Keep each response under 120 words.`;
+Make questions progressively harder and role-specific. Keep each response under 120 words.
+Write naturally, as if speaking out loud — avoid markdown, bullet points, or special symbols.`;
         const text = await callClaude('Begin the interview.', sys);
         addMsg('ai', text, `Question 1 of ${MAX_QUESTIONS}`);
         setHist([{ role: 'assistant', content: text }]);
         setQNum(1);
+        speak(text);
       } catch (e) {
         setApiError('⚠️ API Error: ' + e.message + '\n\nMake sure your API key is set in src/constants.js');
       }
@@ -53,6 +109,7 @@ Make questions progressively harder and role-specific. Keep each response under 
 
   const submit = async () => {
     if (!input.trim() || loading) return;
+    stopSpeaking();
     const ans = input.trim();
     setInput('');
     addMsg('user', ans, 'Your Answer');
@@ -65,7 +122,8 @@ Make questions progressively harder and role-specific. Keep each response under 
     const sys = `You are a professional interviewer for ${role?.label} (${level}).
 ${isLast
   ? "This was the LAST question. Give a warm 2-sentence closing and say 'That wraps up our interview — generating your feedback now!'"
-  : `Ask question ${qNum + 1} of ${MAX_QUESTIONS}. One brief acknowledgment (1 sentence), then the question. Under 100 words total.`}`;
+  : `Ask question ${qNum + 1} of ${MAX_QUESTIONS}. One brief acknowledgment (1 sentence), then the question. Under 100 words total.`}
+Write naturally, as if speaking out loud — avoid markdown, bullet points, or special symbols.`;
 
     const hs = nh.map((m) => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.content}`).join('\n\n');
 
@@ -78,6 +136,7 @@ ${isLast
       const upd = [...nh, { role: 'assistant', content: text }];
       setHist(upd);
       setQNum((p) => p + 1);
+      speak(text);
       if (isLast) await genFeedback(upd);
     } catch (e) {
       setApiError('API Error: ' + e.message);
@@ -114,11 +173,12 @@ ${isLast
   };
 
   const toggleVoice = () => {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    if (!sttSupported) {
       alert('Voice input requires Chrome or Edge browser.');
       return;
     }
     if (recording) { recRef.current?.stop(); setRecording(false); return; }
+    stopSpeaking();
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
     rec.continuous = true;
@@ -129,6 +189,16 @@ ${isLast
     rec.start();
     recRef.current = rec;
     setRecording(true);
+  };
+
+  const toggleVoiceMode = () => {
+    if (voiceMode) stopSpeaking();
+    setVoiceMode((v) => !v);
+  };
+
+  const replayLast = () => {
+    const lastAi = [...msgs].reverse().find((m) => m.role === 'ai');
+    if (lastAi) speak(lastAi.text);
   };
 
   return (
@@ -145,7 +215,7 @@ ${isLast
             <div style={{ fontSize: 11, color: '#8892A4' }}>{level} · {MAX_QUESTIONS} questions</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {Array.from({ length: MAX_QUESTIONS }).map((_, i) => (
               <div key={i} style={{
@@ -155,6 +225,22 @@ ${isLast
               }} />
             ))}
           </div>
+
+          {ttsSupported && (
+            <button
+              onClick={toggleVoiceMode}
+              title={voiceMode ? 'AI voice is ON — click to mute' : 'AI voice is OFF — click to enable'}
+              className="gbtn"
+              style={{
+                background: voiceMode ? '#00D4FF18' : 'transparent',
+                border: `1px solid ${voiceMode ? '#00D4FF55' : '#1E3050'}`,
+                borderRadius: 8, padding: '5px 10px', color: voiceMode ? '#00D4FF' : '#8892A4',
+                fontSize: 13, display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+              {voiceMode ? '🔊' : '🔇'}
+            </button>
+          )}
+
           <button onClick={onExit} className="gbtn" style={{
             background: 'transparent', border: '1px solid #1E3050',
             borderRadius: 8, padding: '5px 12px', color: '#8892A4', fontSize: 12,
@@ -178,6 +264,22 @@ ${isLast
           padding: 14, marginBottom: 16, color: '#F87171', fontSize: 13,
           whiteSpace: 'pre-wrap', flexShrink: 0,
         }}>{apiError}</div>
+      )}
+
+      {/* Speaking indicator */}
+      {speaking && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: '#00D4FF0F', border: '1px solid #00D4FF33', borderRadius: 10,
+          padding: '8px 14px', marginBottom: 14, flexShrink: 0,
+        }}>
+          <Waveform active={true} />
+          <span style={{ fontSize: 12, color: '#00D4FF', flex: 1 }}>Interviewer is speaking…</span>
+          <button onClick={stopSpeaking} className="gbtn" style={{
+            background: 'transparent', border: '1px solid #00D4FF55',
+            borderRadius: 6, padding: '3px 9px', color: '#00D4FF', fontSize: 11,
+          }}>Skip</button>
+        </div>
       )}
 
       {/* Chat */}
@@ -207,7 +309,7 @@ ${isLast
               rows={3}
               disabled={loading}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-              placeholder="Type your answer… (Enter to send, Shift+Enter for new line)"
+              placeholder="Type your answer, or use the mic… (Enter to send, Shift+Enter for new line)"
               style={{
                 flex: 1, background: '#0D1828', border: '1.5px solid #1A2E48',
                 borderRadius: 12, padding: '12px 15px', color: '#C8D8E8',
@@ -217,6 +319,19 @@ ${isLast
               onBlur={(e) => (e.target.style.borderColor = '#1A2E48')}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button
+                onClick={replayLast}
+                disabled={!ttsSupported || loading}
+                title="Replay question"
+                className="gbtn"
+                style={{
+                  width: 42, height: 42, borderRadius: 10, fontSize: 16,
+                  background: '#0D1828', border: '1.5px solid #1A2E48',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  opacity: ttsSupported ? 1 : 0.4,
+                }}>
+                🔁
+              </button>
               <button
                 onClick={toggleVoice}
                 className={recording ? 'mic-act' : ''}
@@ -242,7 +357,9 @@ ${isLast
             </div>
           </div>
           <div style={{ fontSize: 10, color: '#4A5568', marginTop: 7 }}>
-            {recording ? '🔴 Listening… speak clearly' : 'Enter to send · 🎙️ for voice input (Chrome/Edge)'}
+            {recording
+              ? '🔴 Listening… speak clearly'
+              : `Enter to send · 🎙️ for voice input · 🔁 replay question${ttsSupported ? ' · 🔊 toggles AI voice' : ''}`}
           </div>
         </div>
       )}
