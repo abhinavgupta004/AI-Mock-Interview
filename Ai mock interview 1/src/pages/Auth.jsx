@@ -20,26 +20,26 @@ export default function Auth({ onAuth }) {
 
   const submit = useCallback(() => {
     setErr('');
-    if (mode === 'signup' && !name.trim()) { setErr('Please enter your name.'); return; }
-    if (!email.trim()) { setErr('Please enter your email.'); return; }
-    if (!pw) { setErr('Please enter your password.'); return; }
-    if (pw.length < 4) { setErr('Password must be at least 4 characters.'); return; }
+    if (mode === 'signup' && !name.trim()) { setErr('Hey, what should we call you?'); return; }
+    if (!email.trim()) { setErr('Need your email to continue.'); return; }
+    if (!pw) { setErr("Don't forget your password."); return; }
+    if (pw.length < 4) { setErr('Password should be at least 4 characters.'); return; }
 
     setLoading(true);
     setTimeout(() => {
       const users = store.get('aim_users') || {};
       if (mode === 'signup') {
-        if (users[email]) { setErr('An account with this email already exists.'); setLoading(false); return; }
+        if (users[email]) { setErr('Looks like you already have an account — try signing in instead.'); setLoading(false); return; }
         users[email] = { name: name.trim() || email.split('@')[0], email, pw, joined: Date.now() };
         store.set('aim_users', users);
         onAuth(users[email]);
       } else {
         if (!users[email] || users[email].pw !== pw) {
-          setErr('Incorrect email or password.'); setLoading(false); return;
+          setErr("That email/password combo doesn't look right."); setLoading(false); return;
         }
         onAuth(users[email]);
       }
-    }, 400);
+    }, 350);
   }, [mode, name, email, pw, onAuth]);
 
   const handleKey = (e) => { if (e.key === 'Enter') submit(); };
@@ -47,125 +47,163 @@ export default function Auth({ onAuth }) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1829 50%, #091422 100%)',
+      background: '#f7f5f2',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '20px', fontFamily: "'Inter', sans-serif",
+      padding: '24px', fontFamily: "'Inter', -apple-system, sans-serif",
+      position: 'relative', overflow: 'hidden',
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Caveat:wght@600&display=swap');
         * { box-sizing: border-box; }
+
+        .grain {
+          position: absolute; inset: 0; pointer-events: none; opacity: 0.4;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+        }
+
+        .blob {
+          position: absolute; border-radius: 50%; filter: blur(60px);
+          opacity: 0.35; pointer-events: none;
+        }
+        .blob1 { width: 320px; height: 320px; background: #ffd9a0; top: -80px; left: -100px; }
+        .blob2 { width: 280px; height: 280px; background: #b8d4ff; bottom: -100px; right: -80px; }
+
         .auth-input {
           width: 100%;
-          background: rgba(255,255,255,0.04);
-          border: 1.5px solid rgba(255,255,255,0.1);
-          border-radius: 10px;
-          padding: 13px 16px;
-          color: #e8eef5;
-          font-size: 14.5px;
+          background: #fffdfa;
+          border: 2px solid #2b2b2b;
+          border-radius: 8px;
+          padding: 12px 15px;
+          color: #2b2b2b;
+          font-size: 15px;
           font-family: 'Inter', sans-serif;
           outline: none;
-          transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+          transition: transform 0.12s, box-shadow 0.12s;
+          box-shadow: 3px 3px 0 #2b2b2b;
         }
-        .auth-input::placeholder { color: #4a5a72; }
+        .auth-input::placeholder { color: #a8a29a; }
         .auth-input:focus {
-          border-color: #3b82f6;
-          background: rgba(59,130,246,0.06);
-          box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+          transform: translate(-2px, -2px);
+          box-shadow: 5px 5px 0 #ff6b4a;
         }
         .auth-input:hover:not(:focus) {
-          border-color: rgba(255,255,255,0.2);
-          background: rgba(255,255,255,0.06);
+          transform: translate(-1px, -1px);
+          box-shadow: 4px 4px 0 #2b2b2b;
+        }
+
+        .tab-row {
+          display: flex; gap: 8px; margin-bottom: 22px;
         }
         .tab-btn {
-          flex: 1; padding: 9px 8px; border: none; cursor: pointer;
-          font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600;
-          border-radius: 8px; transition: all 0.2s; letter-spacing: 0.2px;
+          flex: 1; padding: 10px 8px; cursor: pointer;
+          font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
+          border-radius: 8px; transition: all 0.15s; letter-spacing: 0.2px;
+          border: 2px solid #2b2b2b;
         }
         .tab-btn.active {
-          background: #1d4ed8; color: #fff;
-          box-shadow: 0 2px 8px rgba(29,78,216,0.4);
+          background: #ffd9a0; color: #2b2b2b;
+          box-shadow: 3px 3px 0 #2b2b2b;
+          transform: translate(-1px, -1px);
         }
         .tab-btn.inactive {
-          background: transparent; color: #6b7fa0;
+          background: #fffdfa; color: #8a8378;
+          box-shadow: none;
         }
-        .tab-btn.inactive:hover { color: #94a3b8; background: rgba(255,255,255,0.05); }
+        .tab-btn.inactive:hover { background: #f3f0ea; color: #2b2b2b; }
+
         .submit-btn {
           width: 100%; padding: 13px;
-          background: linear-gradient(135deg, #1d4ed8, #2563eb);
-          border: none; border-radius: 10px; color: #fff;
-          font-size: 15px; font-weight: 600; font-family: 'Inter', sans-serif;
-          cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px;
-          box-shadow: 0 4px 14px rgba(29,78,216,0.35);
+          background: #2b2b2b;
+          border: 2px solid #2b2b2b; border-radius: 8px; color: #fffdfa;
+          font-size: 15.5px; font-weight: 700; font-family: 'Inter', sans-serif;
+          cursor: pointer; transition: all 0.12s; letter-spacing: 0.2px;
+          box-shadow: 4px 4px 0 #ff6b4a;
         }
         .submit-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, #1e40af, #1d4ed8);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(29,78,216,0.45);
+          transform: translate(-2px, -2px);
+          box-shadow: 6px 6px 0 #ff6b4a;
         }
-        .submit-btn:active:not(:disabled) { transform: translateY(0); }
-        .submit-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        .submit-btn:active:not(:disabled) {
+          transform: translate(1px, 1px);
+          box-shadow: 2px 2px 0 #ff6b4a;
+        }
+        .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
         .guest-btn {
           width: 100%; padding: 11px;
           background: transparent;
-          border: 1.5px solid rgba(255,255,255,0.1);
-          border-radius: 10px; color: #6b7fa0;
-          font-size: 13.5px; font-family: 'Inter', sans-serif;
-          cursor: pointer; transition: all 0.2s;
+          border: 2px dashed #c4bdb0;
+          border-radius: 8px; color: #6b6457;
+          font-size: 13.5px; font-weight: 600; font-family: 'Inter', sans-serif;
+          cursor: pointer; transition: all 0.15s;
         }
         .guest-btn:hover {
-          border-color: rgba(255,255,255,0.2);
-          color: #94a3b8; background: rgba(255,255,255,0.04);
+          border-color: #2b2b2b; color: #2b2b2b; background: #f3f0ea;
         }
+
         .pw-toggle {
-          position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
-          background: none; border: none; cursor: pointer; color: #4a5a72;
+          position: absolute; right: 13px; top: 50%; transform: translateY(-50%);
+          background: none; border: none; cursor: pointer; color: #a8a29a;
           font-size: 13px; padding: 4px; transition: color 0.15s;
         }
-        .pw-toggle:hover { color: #94a3b8; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-        .fade-in { animation: fadeIn 0.3s ease forwards; }
+        .pw-toggle:hover { color: #2b2b2b; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .fade-in { animation: fadeIn 0.25s ease forwards; }
+
+        @keyframes wiggle {
+          0%, 100% { transform: rotate(-3deg); }
+          50% { transform: rotate(3deg); }
+        }
+        .mic-wiggle { display: inline-block; animation: wiggle 2.5s ease-in-out infinite; }
+
         @keyframes spin { to { transform: rotate(360deg); } }
         .spinner {
-          width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3);
+          width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.35);
           border-top-color: #fff; border-radius: 50%;
-          animation: spin 0.7s linear infinite; display: inline-block;
+          animation: spin 0.6s linear infinite; display: inline-block;
           margin-right: 8px; vertical-align: middle;
+        }
+
+        .handwritten {
+          font-family: 'Caveat', cursive;
+          font-size: 19px;
+          color: #ff6b4a;
+          transform: rotate(-2deg);
+          display: inline-block;
         }
       `}</style>
 
-      <div style={{ width: '100%', maxWidth: 400 }} className="fade-in">
+      <div className="grain" />
+      <div className="blob blob1" />
+      <div className="blob blob2" />
+
+      <div style={{ width: '100%', maxWidth: 380, position: 'relative' }} className="fade-in">
 
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 16, margin: '0 auto 16px',
-            background: 'linear-gradient(135deg, #1d4ed8, #3b82f6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 26, boxShadow: '0 8px 24px rgba(29,78,216,0.4)',
-          }}>🎤</div>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{ fontSize: 38, marginBottom: 8 }}>
+            <span className="mic-wiggle">🎤</span>
+          </div>
           <h1 style={{
-            margin: '0 0 6px', fontSize: 26, fontWeight: 700, color: '#e8eef5',
+            margin: '0 0 4px', fontSize: 27, fontWeight: 800, color: '#2b2b2b',
             letterSpacing: '-0.5px',
           }}>InterviewAI</h1>
-          <p style={{ margin: 0, color: '#6b7fa0', fontSize: 14 }}>
-            {mode === 'login' ? 'Good to see you again 👋' : 'Start your interview journey'}
+          <p className="handwritten">
+            {mode === 'login' ? 'good to see you again!' : "let's get you set up"}
           </p>
         </div>
 
         {/* Card */}
         <div style={{
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 18, padding: '28px 28px 24px',
-          backdropFilter: 'blur(12px)',
-          boxShadow: '0 24px 48px rgba(0,0,0,0.4)',
+          background: '#fffdfa',
+          border: '2.5px solid #2b2b2b',
+          borderRadius: 16, padding: '26px 24px 22px',
+          boxShadow: '8px 8px 0 #2b2b2b',
         }}>
 
           {/* Tab toggle */}
-          <div style={{
-            display: 'flex', background: 'rgba(0,0,0,0.3)',
-            borderRadius: 10, padding: 4, marginBottom: 24,
-          }}>
+          <div className="tab-row">
             <button className={`tab-btn ${mode === 'login' ? 'active' : 'inactive'}`}
               onClick={() => switchMode('login')}>Sign In</button>
             <button className={`tab-btn ${mode === 'signup' ? 'active' : 'inactive'}`}
@@ -173,12 +211,12 @@ export default function Auth({ onAuth }) {
           </div>
 
           {/* Fields */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
             {mode === 'signup' && (
               <div className="fade-in">
-                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: '#6b7fa0', marginBottom: 6, letterSpacing: 0.3 }}>
-                  Full Name
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#6b6457', marginBottom: 6 }}>
+                  What's your name?
                 </label>
                 <input
                   className="auth-input"
@@ -193,8 +231,8 @@ export default function Auth({ onAuth }) {
             )}
 
             <div>
-              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: '#6b7fa0', marginBottom: 6, letterSpacing: 0.3 }}>
-                Email Address
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#6b6457', marginBottom: 6 }}>
+                Email
               </label>
               <input
                 className="auth-input"
@@ -208,14 +246,14 @@ export default function Auth({ onAuth }) {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: '#6b7fa0', marginBottom: 6, letterSpacing: 0.3 }}>
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#6b6457', marginBottom: 6 }}>
                 Password
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   className="auth-input"
                   type={showPw ? 'text' : 'password'}
-                  placeholder={mode === 'signup' ? 'Min. 4 characters' : 'Your password'}
+                  placeholder={mode === 'signup' ? 'at least 4 characters' : 'your password'}
                   value={pw}
                   onChange={(e) => setPw(e.target.value)}
                   onKeyDown={handleKey}
@@ -229,37 +267,34 @@ export default function Auth({ onAuth }) {
 
             {err && (
               <div className="fade-in" style={{
-                fontSize: 13, color: '#f87171', padding: '10px 14px',
-                background: 'rgba(248,113,113,0.08)', borderRadius: 8,
-                border: '1px solid rgba(248,113,113,0.2)',
-                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 13, color: '#9a3412', padding: '10px 13px',
+                background: '#fef0e8', borderRadius: 8,
+                border: '2px solid #f4a582',
               }}>
-                <span>⚠️</span> {err}
+                {err}
               </div>
             )}
 
-            <button className="submit-btn" onClick={submit} disabled={loading} style={{ marginTop: 4 }}>
+            <button className="submit-btn" onClick={submit} disabled={loading} style={{ marginTop: 6 }}>
               {loading
-                ? <><span className="spinner" />{mode === 'login' ? 'Signing in...' : 'Creating account...'}</>
-                : mode === 'login' ? 'Sign In →' : 'Create Account →'
+                ? <><span className="spinner" />{mode === 'login' ? 'one sec...' : 'setting things up...'}</>
+                : mode === 'login' ? "Let's go →" : 'Create my account →'
               }
             </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 0' }}>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
-              <span style={{ fontSize: 12, color: '#4a5a72' }}>or</span>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
+            <div style={{ textAlign: 'center', margin: '4px 0', color: '#c4bdb0', fontSize: 12, fontWeight: 600 }}>
+              — or —
             </div>
 
             <button className="guest-btn"
               onClick={() => onAuth({ name: 'Guest User', email: 'guest@aim.ai', joined: Date.now() })}>
-              Continue as Guest
+              Just let me try it (Guest)
             </button>
           </div>
         </div>
 
-        <p style={{ textAlign: 'center', color: '#374151', fontSize: 12, marginTop: 20 }}>
-          Your data stays in your browser — no servers, no tracking.
+        <p style={{ textAlign: 'center', color: '#a8a29a', fontSize: 12, marginTop: 18 }}>
+          Everything stays on your device. Nothing leaves your browser.
         </p>
       </div>
     </div>
