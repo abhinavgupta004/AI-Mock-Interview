@@ -16,10 +16,11 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
   const [recording, setRecording] = useState(false);
   const [done, setDone] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [voiceMode, setVoiceMode] = useState(true);   // AI speaks questions aloud
-  const [speaking, setSpeaking] = useState(false);     // currently speaking
+  const [voiceMode, setVoiceMode] = useState(true);
+  const [speaking, setSpeaking] = useState(false);
   const [voices, setVoices] = useState([]);
-  const [started, setStarted] = useState(false);       // gated behind user click for autoplay policy
+  const [started, setStarted] = useState(false);
+  const [candidateSkills, setCandidateSkills] = useState('');
 
   const chatRef = useRef(null);
   const recRef = useRef(null);
@@ -33,7 +34,6 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
     chatRef.current?.scrollTo({ top: 99999, behavior: 'smooth' });
   }, [msgs, feedback]);
 
-  // Load available voices (some browsers load them async)
   useEffect(() => {
     if (!ttsSupported) return;
     const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
@@ -43,7 +43,6 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Stop any speech when leaving the room
   useEffect(() => {
     return () => { if (ttsSupported) window.speechSynthesis.cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -52,20 +51,17 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
   const addMsg = (r, text, label = '') =>
     setMsgs((p) => [...p, { role: r, text, label, id: Date.now() + Math.random() }]);
 
-  // Pick a natural-sounding English voice if available
   const pickVoice = () => {
     if (!voices.length) return null;
-    const preferred = voices.find(v => /en-US|en-GB/.test(v.lang) && /Google|Natural|Online/i.test(v.name))
+    return voices.find(v => /en-US|en-GB/.test(v.lang) && /Google|Natural|Online/i.test(v.name))
       || voices.find(v => /en-US/.test(v.lang))
       || voices.find(v => v.lang.startsWith('en'))
       || voices[0];
-    return preferred;
   };
 
   const speak = (text) => {
     if (!ttsSupported || !voiceMode) return;
     window.speechSynthesis.cancel();
-    // Strip markdown-ish characters so they aren't read aloud
     const clean = text.replace(/[*_#`]/g, '');
     const utter = new SpeechSynthesisUtterance(clean);
     const v = pickVoice();
@@ -76,11 +72,9 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
     utter.onend = () => setSpeaking(false);
     utter.onerror = () => setSpeaking(false);
     utterRef.current = utter;
-    // Chrome sometimes needs a tick after cancel() before speak() actually fires
     setTimeout(() => window.speechSynthesis.speak(utter), 50);
   };
 
-  // Unlocks the browser's speech engine — must be called directly inside a click handler
   const unlockSpeech = () => {
     if (!ttsSupported) return;
     const warm = new SpeechSynthesisUtterance('');
@@ -93,7 +87,7 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
     setSpeaking(false);
   };
 
-  // Start interview only after user clicks "Start" (required for audio autoplay)
+  // Q1 — pehle skills poochho
   useEffect(() => {
     if (!started) return;
     (async () => {
@@ -101,23 +95,52 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
       setAiSpeak(true);
       setApiError('');
       try {
-        const sys = `You are a professional technical interviewer at a top tech company, hiring for ${role?.label} (${level} level).
-Ask ONE question at a time. Start with a warm 1-sentence greeting then ask Question 1.
-Make questions progressively harder and role-specific. Keep each response under 120 words.
-Write naturally, as if speaking out loud — avoid markdown, bullet points, or special symbols.`;
-        const text = await callClaude('Begin the interview.', sys);
-        addMsg('ai', text, `Question 1 of ${MAX_QUESTIONS}`);
+        const sys = `You are a professional technical interviewer at a top tech company interviewing for ${role?.label} (${level} level).
+This is the opening of the interview. Give a brief warm greeting (1 sentence), then ask the candidate to describe their key skills, technologies, frameworks, and tools they are most comfortable with — relevant to the ${role?.label} role.
+Keep it conversational, under 80 words. No markdown, no bullet points — speak naturally as if in a real interview.`;
+        const text = await callClaude('Start the interview — ask about skills.', sys);
+        addMsg('ai', text, 'Question 1 of 10 — Skills');
         setHist([{ role: 'assistant', content: text }]);
         setQNum(1);
         speak(text);
       } catch (e) {
-        setApiError('⚠️ API Error: ' + e.message + '\n\nMake sure your API key is set in src/constants.js');
+        setApiError('⚠️ API Error: ' + e.message);
       }
       setLoading(false);
       setAiSpeak(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started]);
+
+  // Q2–Q10 logic
+  const buildNextPrompt = (qNumber, skills) => {
+    const questionPlan = {
+      2: `Ask a foundational conceptual question directly related to one of the candidate's mentioned skills or technologies.`,
+      3: `Ask an intermediate technical question about how they have used one of their mentioned skills in a real project — ask for specifics.`,
+      4: `Ask a coding question. Ask them to write or explain code — for example a function, algorithm, or snippet relevant to their role and mentioned skills. Be specific about what to write.`,
+      5: `Ask a problem-solving or debugging question — give a scenario or a buggy concept and ask them to find/fix the issue.`,
+      6: `Ask about system design or architecture — something relevant to their role. For example, how they would design a feature or system they might build.`,
+      7: `Ask a deeper technical question — performance optimization, best practices, or tradeoffs related to one of their skills.`,
+      8: `Ask an advanced concept question — something a senior-level person in their field should know deeply.`,
+      9: `Ask a situational or behavioral question related to a technical challenge — how they handled a real problem, a disagreement in a team, or a tough deadline.`,
+      10: `This is the LAST question. Ask one final thoughtful question — either a concept they haven't been asked about yet, or ask what they would do differently in a past project. Then give a warm 1-sentence closing statement like "That's all from my side — I'll generate your feedback now." Do not say anything else after closing.`,
+    };
+
+    const plan = questionPlan[qNumber] || questionPlan[9];
+
+    return `You are a professional technical interviewer for ${role?.label} (${level} level).
+The candidate mentioned these skills: ${skills}.
+This is question ${qNumber} of 10 in the interview.
+
+${plan}
+
+Rules:
+- Ask only ONE question.
+- Keep your response under 100 words.
+- Start with a brief 1-sentence acknowledgment of their previous answer (optional for Q10).
+- Write naturally as if speaking out loud — no markdown, no bullet points, no special symbols.
+- Make the question directly relevant to the candidate's stated skills and the ${role?.label} role.`;
+  };
 
   const submit = async () => {
     if (!input.trim() || loading) return;
@@ -127,29 +150,44 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
     addMsg('user', ans, 'Your Answer');
     const nh = [...hist, { role: 'user', content: ans }];
     setHist(nh);
+
+    // Q1 answer — extract skills
+    let skills = candidateSkills;
+    if (qNum === 1) {
+      skills = ans;
+      setCandidateSkills(ans);
+    }
+
     setLoading(true);
     setAiSpeak(true);
 
+    const nextQ = qNum + 1;
     const isLast = qNum >= MAX_QUESTIONS;
-    const sys = `You are a professional interviewer for ${role?.label} (${level}).
-${isLast
-  ? "This was the LAST question. Give a warm 2-sentence closing and say 'That wraps up our interview — generating your feedback now!'"
-  : `Ask question ${qNum + 1} of ${MAX_QUESTIONS}. One brief acknowledgment (1 sentence), then the question. Under 100 words total.`}
-Write naturally, as if speaking out loud — avoid markdown, bullet points, or special symbols.`;
 
-    const hs = nh.map((m) => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.content}`).join('\n\n');
+    if (isLast) {
+      await genFeedback(nh);
+      setLoading(false);
+      setAiSpeak(false);
+      return;
+    }
 
     try {
+      const sys = buildNextPrompt(nextQ, skills || 'general software development skills');
+      const hs = nh.map((m) =>
+        `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.content}`
+      ).join('\n\n');
+
       const text = await callClaude(
-        `Conversation:\n${hs}\n\n${isLast ? 'Close the interview.' : 'Ask the next question.'}`,
+        `Conversation so far:\n${hs}\n\nNow ask question ${nextQ}.`,
         sys
       );
-      addMsg('ai', text, isLast ? 'Closing' : `Question ${qNum + 1} of ${MAX_QUESTIONS}`);
+
+      const label = nextQ === MAX_QUESTIONS ? 'Question 10 of 10 — Final' : `Question ${nextQ} of 10`;
+      addMsg('ai', text, label);
       const upd = [...nh, { role: 'assistant', content: text }];
       setHist(upd);
-      setQNum((p) => p + 1);
+      setQNum(nextQ);
       speak(text);
-      if (isLast) await genFeedback(upd);
     } catch (e) {
       setApiError('API Error: ' + e.message);
     }
@@ -161,8 +199,11 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
   const genFeedback = async (h) => {
     setLoading(true);
     const sys = `You are an expert talent evaluator. Return ONLY valid JSON, no markdown, no extra text.`;
-    const hs = h.map((m) => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.content}`).join('\n\n');
-    const prompt = `${role?.label} (${level}) interview:\n${hs}\n\nReturn ONLY this JSON:
+    const hs = h.map((m) =>
+      `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.content}`
+    ).join('\n\n');
+
+    const prompt = `${role?.label} (${level}) interview transcript:\n${hs}\n\nReturn ONLY this JSON:
 {"score":<0-100>,"verdict":"<Strong Hire|Hire|No Hire|Strong No Hire>","technical":<0-10>,"communication":<0-10>,"depth":<0-10>,"structure":<0-10>,"strengths":["...","..."],"tips":["...","...","..."]}`;
 
     try {
@@ -185,10 +226,7 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
   };
 
   const toggleVoice = () => {
-    if (!sttSupported) {
-      alert('Voice input requires Chrome or Edge browser.');
-      return;
-    }
+    if (!sttSupported) { alert('Voice input requires Chrome or Edge.'); return; }
     if (recording) { recRef.current?.stop(); setRecording(false); return; }
     stopSpeaking();
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -214,16 +252,17 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
   };
 
   const handleStartClick = () => {
-    unlockSpeech();   // must run inside the click handler itself, synchronously
+    unlockSpeech();
     setStarted(true);
   };
 
-  // Pre-start screen — required so the browser allows audio playback later
+  // Pre-start screen
   if (!started) {
     return (
       <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        height: '100%', maxWidth: 480, margin: '0 auto', textAlign: 'center', gap: 18,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', height: '100%', maxWidth: 480,
+        margin: '0 auto', textAlign: 'center', gap: 18,
       }}>
         <span style={{ fontSize: 44 }}>{role?.icon}</span>
         <div>
@@ -232,14 +271,24 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
           </div>
           <div style={{ fontSize: 13, color: '#8892A4' }}>{level} · {MAX_QUESTIONS} questions</div>
         </div>
-        <p style={{ fontSize: 13.5, color: '#8892A4', lineHeight: 1.6, maxWidth: 360 }}>
-          {ttsSupported
-            ? 'The interviewer will ask questions out loud. Make sure your sound is on, then click below to begin.'
-            : 'Your browser does not support voice playback — questions will be shown as text.'}
+        <div style={{ fontSize: 13, color: '#8892A4', lineHeight: 1.7, maxWidth: 380,
+          background: '#0D1828', border: '1px solid #1A2E48', borderRadius: 12, padding: '16px 20px', textAlign: 'left' }}>
+          <div style={{ marginBottom: 8, color: '#C8D8E8', fontWeight: 600 }}>What to expect:</div>
+          <div>Q1 — Your skills & background</div>
+          <div>Q2–Q3 — Conceptual & project questions</div>
+          <div>Q4 — Coding / implementation</div>
+          <div>Q5 — Problem solving & debugging</div>
+          <div>Q6 — System design</div>
+          <div>Q7–Q8 — Advanced & best practices</div>
+          <div>Q9 — Situational / behavioral</div>
+          <div>Q10 — Final question + feedback</div>
+        </div>
+        <p style={{ fontSize: 13, color: '#8892A4', margin: 0 }}>
+          {ttsSupported ? '🔊 Make sure your volume is on — AI will speak questions aloud.' : 'Questions will appear as text.'}
         </p>
         <button onClick={handleStartClick} className="pbtn sg" style={{
           background: 'linear-gradient(135deg,#0060CC,#00D4FF)',
-          border: 'none', borderRadius: 12, padding: '14px 36px',
+          border: 'none', borderRadius: 12, padding: '14px 40px',
           color: '#fff', fontWeight: 700, fontSize: 15,
         }}>
           {ttsSupported ? '🔊 Start Interview' : 'Start Interview →'}
@@ -270,29 +319,22 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {Array.from({ length: MAX_QUESTIONS }).map((_, i) => (
               <div key={i} style={{
-                width: 8, height: 8, borderRadius: '50%',
+                width: 7, height: 7, borderRadius: '50%',
                 background: i < qNum ? '#00D4FF' : '#1E3050',
                 transition: 'background 0.4s',
               }} />
             ))}
           </div>
-
-          {/* Voice mode toggle */}
           {ttsSupported && (
-            <button
-              onClick={toggleVoiceMode}
-              title={voiceMode ? 'AI voice is ON — click to mute' : 'AI voice is OFF — click to enable'}
-              className="gbtn"
-              style={{
-                background: voiceMode ? '#00D4FF18' : 'transparent',
-                border: `1px solid ${voiceMode ? '#00D4FF55' : '#1E3050'}`,
-                borderRadius: 8, padding: '5px 10px', color: voiceMode ? '#00D4FF' : '#8892A4',
-                fontSize: 13, display: 'flex', alignItems: 'center', gap: 5,
-              }}>
+            <button onClick={toggleVoiceMode} className="gbtn" style={{
+              background: voiceMode ? '#00D4FF18' : 'transparent',
+              border: `1px solid ${voiceMode ? '#00D4FF55' : '#1E3050'}`,
+              borderRadius: 8, padding: '5px 10px',
+              color: voiceMode ? '#00D4FF' : '#8892A4', fontSize: 13,
+            }}>
               {voiceMode ? '🔊' : '🔇'}
             </button>
           )}
-
           <button onClick={onExit} className="gbtn" style={{
             background: 'transparent', border: '1px solid #1E3050',
             borderRadius: 8, padding: '5px 12px', color: '#8892A4', fontSize: 12,
@@ -309,7 +351,6 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
         }} />
       </div>
 
-      {/* API error */}
       {apiError && (
         <div style={{
           background: '#F8717111', border: '1px solid #F8717133', borderRadius: 10,
@@ -318,7 +359,6 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
         }}>{apiError}</div>
       )}
 
-      {/* Speaking indicator */}
       {speaking && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -361,33 +401,28 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
               rows={3}
               disabled={loading}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
-              placeholder="Type your answer, or use the mic… (Enter to send, Shift+Enter for new line)"
+              placeholder={qNum === 1
+                ? 'Tell the interviewer about your skills, technologies and tools...'
+                : 'Type your answer, or press 🎙️ to speak... (Enter to send)'}
               style={{
                 flex: 1, background: '#0D1828', border: '1.5px solid #1A2E48',
                 borderRadius: 12, padding: '12px 15px', color: '#C8D8E8',
                 fontSize: 14, lineHeight: 1.65, transition: 'border-color 0.2s',
+                fontFamily: 'Inter, sans-serif',
               }}
               onFocus={(e) => (e.target.style.borderColor = '#00D4FF')}
               onBlur={(e) => (e.target.style.borderColor = '#1A2E48')}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button
-                onClick={replayLast}
-                disabled={!ttsSupported || loading}
-                title="Replay question"
-                className="gbtn"
+              <button onClick={replayLast} disabled={!ttsSupported || loading}
+                title="Replay last question" className="gbtn"
                 style={{
                   width: 42, height: 42, borderRadius: 10, fontSize: 16,
                   background: '#0D1828', border: '1.5px solid #1A2E48',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   opacity: ttsSupported ? 1 : 0.4,
-                }}>
-                🔁
-              </button>
-              <button
-                onClick={toggleVoice}
-                className={recording ? 'mic-act' : ''}
-                title={recording ? 'Stop recording' : 'Voice input (Chrome/Edge)'}
+                }}>🔁</button>
+              <button onClick={toggleVoice} className={recording ? 'mic-act' : ''}
                 style={{
                   width: 42, height: 42, borderRadius: 10, fontSize: 18,
                   background: recording ? '#F8717122' : '#0D1828',
@@ -396,10 +431,7 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
                 }}>
                 {recording ? '⏹' : '🎙️'}
               </button>
-              <button
-                onClick={submit}
-                disabled={loading || !input.trim()}
-                className="pbtn"
+              <button onClick={submit} disabled={loading || !input.trim()} className="pbtn"
                 style={{
                   width: 42, height: 42, borderRadius: 10,
                   background: 'linear-gradient(135deg,#0060CC,#00A0DC)',
@@ -409,9 +441,8 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
             </div>
           </div>
           <div style={{ fontSize: 10, color: '#4A5568', marginTop: 7 }}>
-            {recording
-              ? '🔴 Listening… speak clearly'
-              : `Enter to send · 🎙️ for voice input · 🔁 replay question${ttsSupported ? ' · 🔊 toggles AI voice' : ''}`}
+            {recording ? '🔴 Listening… speak clearly'
+              : `Enter to send · 🎙️ voice input · 🔁 replay · ${ttsSupported ? '🔊 toggles AI voice' : ''}`}
           </div>
         </div>
       )}
@@ -419,7 +450,7 @@ Write naturally, as if speaking out loud — avoid markdown, bullet points, or s
       {done && (
         <div style={{
           flexShrink: 0, paddingTop: 16, borderTop: '1px solid #1A2A3A',
-          marginTop: 8, display: 'flex', gap: 10, justifyContent: 'center',
+          marginTop: 8, display: 'flex', justifyContent: 'center',
         }}>
           <button onClick={onExit} className="pbtn sg" style={{
             background: 'linear-gradient(135deg,#0060CC,#00D4FF)',
