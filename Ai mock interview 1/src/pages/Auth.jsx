@@ -196,7 +196,7 @@ export default function Auth({ onAuth }) {
                 fontSize: 13, color: '#ff6b6b', padding: '10px 13px',
                 background: 'rgba(255,107,107,0.1)', borderRadius: 8,
                 border: '1px solid rgba(255,107,107,0.25)',
-              }}>⚠️ {err}</div>
+              }}> {err}</div>
             )}
 
             <button className="submit-btn" onClick={submit} disabled={loading} style={{ marginTop: 6 }}>
@@ -213,7 +213,7 @@ export default function Auth({ onAuth }) {
 
             <button className="guest-btn"
               onClick={() => onAuth({ name: 'Guest User', email: 'guest@aim.ai', joined: Date.now() })}>
-              Continue as Guest (Demo)
+              Continue as Guest 
             </button>
           </div>
         </div>
