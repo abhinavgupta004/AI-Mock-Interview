@@ -23,77 +23,40 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleAuth = (u) => {
-    store.set('aim_user', u);
-    setUser(u);
-  };
-
-  const handleLogout = () => {
-    store.del('aim_user');
-    setUser(null);
-    setSessions([]);
-    setPage('dashboard');
-  };
-
-  const handleStartInterview = (role, level) => {
-    setInterview({ role, level });
-    setPage('room');
-  };
-
+  const handleAuth = (u) => { store.set('aim_user', u); setUser(u); };
+  const handleLogout = () => { store.del('aim_user'); setUser(null); setSessions([]); setPage('dashboard'); };
+  const handleStartInterview = (role, level) => { setInterview({ role, level }); setPage('room'); };
   const handleComplete = (session) => {
     const updated = [...sessions, session];
     setSessions(updated);
     store.set('aim_sessions', updated);
     showToast(`Interview complete! Score: ${session.feedback?.score}/100`, 'success');
   };
-
-  const handleExit = () => {
-    setInterview(null);
-    setPage('dashboard');
-  };
-
-  const handleClearHistory = () => {
-    setSessions([]);
-    store.set('aim_sessions', []);
-    showToast('Session history cleared.', 'info');
-  };
+  const handleExit = () => { setInterview(null); setPage('dashboard'); };
+  const handleClearHistory = () => { setSessions([]); store.set('aim_sessions', []); showToast('History cleared.', 'info'); };
 
   if (!user) return <Auth onAuth={handleAuth} />;
 
   const renderPage = () => {
-    if (page === 'room' && interview) {
-      return (
-        <InterviewRoom
-          roleId={interview.role}
-          level={interview.level}
-          onComplete={handleComplete}
-          onExit={handleExit}
-        />
-      );
-    }
+    if (page === 'room' && interview) return (
+      <InterviewRoom roleId={interview.role} level={interview.level} onComplete={handleComplete} onExit={handleExit} />
+    );
     if (page === 'interview') return <InterviewSetup onStart={handleStartInterview} />;
-    if (page === 'history')   return <History sessions={sessions} onClear={handleClearHistory} />;
-    if (page === 'stats')     return <Analytics sessions={sessions} />;
+    if (page === 'history') return <History sessions={sessions} onClear={handleClearHistory} />;
+    if (page === 'stats') return <Analytics sessions={sessions} />;
     return <Dashboard sessions={sessions} user={user} onStart={() => setPage('interview')} />;
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#080E1A' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#F8F9FA' }}>
       {page !== 'room' && (
-        <Sidebar
-          page={page}
-          setPage={setPage}
-          user={user}
-          onLogout={handleLogout}
-          sessions={sessions}
-        />
+        <Sidebar page={page} setPage={setPage} user={user} onLogout={handleLogout} sessions={sessions} />
       )}
       <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{
           flex: 1,
-          padding: page === 'room' ? '24px 28px' : '28px 32px',
-          display: 'flex',
-          flexDirection: 'column',
+          padding: page === 'room' ? '24px 28px' : '32px 36px',
+          display: 'flex', flexDirection: 'column',
           height: page === 'room' ? '100vh' : 'auto',
         }}>
           {renderPage()}
