@@ -52,34 +52,84 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
     setMsgs((p) => [...p, { role: r, text, label, id: Date.now() + Math.random() }]);
 
   const pickVoice = () => {
-    if (!voices.length) return null;
-    return voices.find(v => /en-US|en-GB/.test(v.lang) && /Google|Natural|Online/i.test(v.name))
-      || voices.find(v => /en-US/.test(v.lang))
-      || voices.find(v => v.lang.startsWith('en'))
-      || voices[0];
+    const allVoices = window.speechSynthesis.getVoices();
+    return (
+      allVoices.find(v => v.name.includes('Google US English')) ||
+      allVoices.find(v => v.name.includes('Google UK English Female')) ||
+      allVoices.find(v => /en-US/.test(v.lang) && v.localService === false) ||
+      allVoices.find(v => /en-US/.test(v.lang)) ||
+      allVoices.find(v => v.lang.startsWith('en')) ||
+      allVoices[0]
+    );
   };
 
   const speak = (text) => {
     if (!ttsSupported || !voiceMode) return;
+
     window.speechSynthesis.cancel();
-    const clean = text.replace(/[*_#`]/g, '');
-    const utter = new SpeechSynthesisUtterance(clean);
-    const v = pickVoice();
-    if (v) utter.voice = v;
-    utter.rate = 1;
-    utter.pitch = 1;
-    utter.onstart = () => setSpeaking(true);
-    utter.onend = () => setSpeaking(false);
-    utter.onerror = () => setSpeaking(false);
-    utterRef.current = utter;
-    setTimeout(() => window.speechSynthesis.speak(utter), 50);
+
+    const clean = text.replace(/[*_#`]/g, '').trim();
+    if (!clean) return;
+
+    const trySpeak = () => {
+      const utter = new SpeechSynthesisUtterance(clean);
+      utter.lang = 'en-US';
+      utter.rate = 0.95;
+      utter.pitch = 1;
+      utter.volume = 1;
+
+      const preferred = pickVoice();
+      if (preferred) utter.voice = preferred;
+
+      utter.onstart = () => setSpeaking(true);
+      utter.onend = () => {
+        setSpeaking(false);
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      };
+      utter.onerror = (e) => {
+        console.warn('Speech error:', e.error);
+        setSpeaking(false);
+      };
+
+      utterRef.current = utter;
+      window.speechSynthesis.speak(utter);
+
+      // Chrome long-text bug fix
+      const resumeInterval = setInterval(() => {
+        if (!window.speechSynthesis.speaking) {
+          clearInterval(resumeInterval);
+          return;
+        }
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }, 10000);
+    };
+
+    const currentVoices = window.speechSynthesis.getVoices();
+    if (currentVoices.length > 0) {
+      setTimeout(trySpeak, 150);
+    } else {
+      window.speechSynthesis.addEventListener('voiceschanged', () => {
+        setTimeout(trySpeak, 150);
+      }, { once: true });
+    }
   };
 
   const unlockSpeech = () => {
     if (!ttsSupported) return;
-    const warm = new SpeechSynthesisUtterance('');
+
+    const v = window.speechSynthesis.getVoices();
+    if (v.length) setVoices(v);
+
+    const warm = new SpeechSynthesisUtterance(' ');
+    warm.volume = 0.01;
+    warm.rate = 2;
     window.speechSynthesis.speak(warm);
-    window.speechSynthesis.cancel();
+
+    setTimeout(() => {
+      window.speechSynthesis.cancel();
+      setVoices(window.speechSynthesis.getVoices());
+    }, 300);
   };
 
   const stopSpeaking = () => {
@@ -112,7 +162,6 @@ Keep it conversational, under 80 words. No markdown, no bullet points — speak 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [started]);
 
-  // Q2–Q10 logic
   const buildNextPrompt = (qNumber, skills) => {
     const questionPlan = {
       2: `Ask a foundational conceptual question directly related to one of the candidate's mentioned skills or technologies.`,
@@ -151,7 +200,6 @@ Rules:
     const nh = [...hist, { role: 'user', content: ans }];
     setHist(nh);
 
-    // Q1 answer — extract skills
     let skills = candidateSkills;
     if (qNum === 1) {
       skills = ans;
@@ -266,36 +314,43 @@ Rules:
       }}>
         <span style={{ fontSize: 44 }}>{role?.icon}</span>
         <div>
-          <div className="sg" style={{ fontSize: 20, fontWeight: 700, color: '#E2EAF4', marginBottom: 6 }}>
+          <div className="sg" style={{ fontSize: 20, fontWeight: 700, color: '#1A1A24', marginBottom: 6 }}>
             {role?.label} Interview
           </div>
-          <div style={{ fontSize: 13, color: '#8892A4' }}>{level} · {MAX_QUESTIONS} questions</div>
+          <div style={{ fontSize: 13, color: '#6b7280' }}>{level} · {MAX_QUESTIONS} questions</div>
         </div>
-        <div style={{ fontSize: 13, color: '#8892A4', lineHeight: 1.7, maxWidth: 380,
-          background: '#0D1828', border: '1px solid #1A2E48', borderRadius: 12, padding: '16px 20px', textAlign: 'left' }}>
-          <div style={{ marginBottom: 8, color: '#C8D8E8', fontWeight: 600 }}>What to expect:</div>
-          <div>Q1 — Your skills & background</div>
-          <div>Q2–Q3 — Conceptual & project questions</div>
+        <div style={{
+          fontSize: 13, color: '#6b7280', lineHeight: 1.8, maxWidth: 380,
+          background: '#fff', border: '1.5px solid #e8eaf0',
+          borderRadius: 14, padding: '18px 22px', textAlign: 'left',
+        }}>
+          <div style={{ marginBottom: 10, color: '#1A1A24', fontWeight: 700 }} className="sg">
+            What to expect:
+          </div>
+          <div>Q1 — Your skills &amp; background</div>
+          <div>Q2–Q3 — Conceptual &amp; project questions</div>
           <div>Q4 — Coding / implementation</div>
-          <div>Q5 — Problem solving & debugging</div>
+          <div>Q5 — Problem solving &amp; debugging</div>
           <div>Q6 — System design</div>
-          <div>Q7–Q8 — Advanced & best practices</div>
+          <div>Q7–Q8 — Advanced &amp; best practices</div>
           <div>Q9 — Situational / behavioral</div>
           <div>Q10 — Final question + feedback</div>
         </div>
-        <p style={{ fontSize: 13, color: '#8892A4', margin: 0 }}>
-          {ttsSupported ? '🔊 Make sure your volume is on — AI will speak questions aloud.' : 'Questions will appear as text.'}
+        <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+          {ttsSupported
+            ? '🔊 Make sure your volume is on — AI will speak questions aloud.'
+            : 'Questions will appear as text.'}
         </p>
         <button onClick={handleStartClick} className="pbtn sg" style={{
-          background: 'linear-gradient(135deg,#0060CC,#00D4FF)',
-          border: 'none', borderRadius: 12, padding: '14px 40px',
-          color: '#fff', fontWeight: 700, fontSize: 15,
+          background: '#00FFA3', border: 'none', borderRadius: 12,
+          padding: '14px 40px', color: '#1A1A24', fontWeight: 800, fontSize: 15,
         }}>
           {ttsSupported ? '🔊 Start Interview' : 'Start Interview →'}
         </button>
-        <button onClick={onExit} className="gbtn" style={{
-          background: 'transparent', border: '1px solid #1E3050',
-          borderRadius: 8, padding: '7px 16px', color: '#8892A4', fontSize: 12,
+        <button onClick={onExit} style={{
+          background: 'transparent', border: '1.5px solid #e8eaf0',
+          borderRadius: 8, padding: '7px 18px', color: '#6b7280',
+          fontSize: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
         }}>Back</button>
       </div>
     );
@@ -306,70 +361,79 @@ Rules:
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        paddingBottom: 16, marginBottom: 4, borderBottom: '1px solid #1A2A3A', flexShrink: 0,
+        paddingBottom: 16, marginBottom: 4,
+        borderBottom: '1.5px solid #e8eaf0', flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 24 }}>{role?.icon}</span>
+          <div style={{
+            width: 42, height: 42, borderRadius: 12, background: '#2D1B69',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+          }}>{role?.icon}</div>
           <div>
-            <div className="sg" style={{ fontSize: 15, fontWeight: 600, color: '#E2EAF4' }}>{role?.label}</div>
-            <div style={{ fontSize: 11, color: '#8892A4' }}>{level} · {MAX_QUESTIONS} questions</div>
+            <div className="sg" style={{ fontSize: 15, fontWeight: 700, color: '#1A1A24' }}>{role?.label}</div>
+            <div style={{ fontSize: 11, color: '#9ca3af' }}>{level} · {MAX_QUESTIONS} questions</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
             {Array.from({ length: MAX_QUESTIONS }).map((_, i) => (
               <div key={i} style={{
                 width: 7, height: 7, borderRadius: '50%',
-                background: i < qNum ? '#00D4FF' : '#1E3050',
+                background: i < qNum ? '#00FFA3' : '#e8eaf0',
                 transition: 'background 0.4s',
               }} />
             ))}
           </div>
           {ttsSupported && (
-            <button onClick={toggleVoiceMode} className="gbtn" style={{
-              background: voiceMode ? '#00D4FF18' : 'transparent',
-              border: `1px solid ${voiceMode ? '#00D4FF55' : '#1E3050'}`,
+            <button onClick={toggleVoiceMode} style={{
+              background: voiceMode ? 'rgba(0,255,163,0.12)' : '#F8F9FA',
+              border: `1.5px solid ${voiceMode ? '#00FFA3' : '#e8eaf0'}`,
               borderRadius: 8, padding: '5px 10px',
-              color: voiceMode ? '#00D4FF' : '#8892A4', fontSize: 13,
+              color: voiceMode ? '#00a86b' : '#9ca3af',
+              fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
             }}>
               {voiceMode ? '🔊' : '🔇'}
             </button>
           )}
-          <button onClick={onExit} className="gbtn" style={{
-            background: 'transparent', border: '1px solid #1E3050',
-            borderRadius: 8, padding: '5px 12px', color: '#8892A4', fontSize: 12,
+          <button onClick={onExit} style={{
+            background: '#F8F9FA', border: '1.5px solid #e8eaf0',
+            borderRadius: 8, padding: '5px 14px', color: '#6b7280',
+            fontSize: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
           }}>Exit</button>
         </div>
       </div>
 
       {/* Progress bar */}
-      <div style={{ height: 3, background: '#1A2A3A', borderRadius: 4, marginBottom: 20, flexShrink: 0 }}>
+      <div style={{ height: 4, background: '#F0F1F5', borderRadius: 4, marginBottom: 20, flexShrink: 0 }}>
         <div className="pbar" style={{
           height: '100%', borderRadius: 4,
           width: `${Math.min(qNum, MAX_QUESTIONS) / MAX_QUESTIONS * 100}%`,
-          background: 'linear-gradient(90deg,#0060CC,#00D4FF)',
+          background: 'linear-gradient(90deg, #2D1B69, #00FFA3)',
         }} />
       </div>
 
+      {/* API error */}
       {apiError && (
         <div style={{
-          background: '#F8717111', border: '1px solid #F8717133', borderRadius: 10,
-          padding: 14, marginBottom: 16, color: '#F87171', fontSize: 13,
+          background: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 10,
+          padding: 14, marginBottom: 16, color: '#ef4444', fontSize: 13,
           whiteSpace: 'pre-wrap', flexShrink: 0,
         }}>{apiError}</div>
       )}
 
+      {/* Speaking indicator */}
       {speaking && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          background: '#00D4FF0F', border: '1px solid #00D4FF33', borderRadius: 10,
-          padding: '8px 14px', marginBottom: 14, flexShrink: 0,
+          background: 'rgba(0,255,163,0.06)', border: '1.5px solid rgba(0,255,163,0.3)',
+          borderRadius: 10, padding: '8px 14px', marginBottom: 14, flexShrink: 0,
         }}>
           <Waveform active={true} />
-          <span style={{ fontSize: 12, color: '#00D4FF', flex: 1 }}>Interviewer is speaking…</span>
-          <button onClick={stopSpeaking} className="gbtn" style={{
-            background: 'transparent', border: '1px solid #00D4FF55',
-            borderRadius: 6, padding: '3px 9px', color: '#00D4FF', fontSize: 11,
+          <span style={{ fontSize: 12, color: '#00a86b', flex: 1 }}>Interviewer is speaking…</span>
+          <button onClick={stopSpeaking} style={{
+            background: 'transparent', border: '1.5px solid rgba(0,168,107,0.3)',
+            borderRadius: 6, padding: '3px 10px', color: '#00a86b',
+            fontSize: 11, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
           }}>Skip</button>
         </div>
       )}
@@ -380,10 +444,9 @@ Rules:
         {loading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0' }}>
             <div style={{
-              width: 30, height: 30, borderRadius: '50%',
-              background: 'linear-gradient(135deg,#00D4FF22,#0080FF44)',
-              border: '1.5px solid #00D4FF44',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
+              width: 32, height: 32, borderRadius: 10,
+              background: '#2D1B69',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
             }}>🤖</div>
             <Waveform active={aiSpeak} />
           </div>
@@ -393,7 +456,7 @@ Rules:
 
       {/* Input */}
       {!done && (
-        <div style={{ flexShrink: 0, paddingTop: 14, borderTop: '1px solid #1A2A3A', marginTop: 8 }}>
+        <div style={{ flexShrink: 0, paddingTop: 14, borderTop: '1.5px solid #e8eaf0', marginTop: 8 }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
             <textarea
               value={input}
@@ -405,43 +468,49 @@ Rules:
                 ? 'Tell the interviewer about your skills, technologies and tools...'
                 : 'Type your answer, or press 🎙️ to speak... (Enter to send)'}
               style={{
-                flex: 1, background: '#0D1828', border: '1.5px solid #1A2E48',
-                borderRadius: 12, padding: '12px 15px', color: '#C8D8E8',
+                flex: 1, background: '#fff',
+                border: '1.5px solid #e8eaf0',
+                borderRadius: 12, padding: '12px 15px', color: '#1A1A24',
                 fontSize: 14, lineHeight: 1.65, transition: 'border-color 0.2s',
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: 'Inter, sans-serif', resize: 'none',
               }}
-              onFocus={(e) => (e.target.style.borderColor = '#00D4FF')}
-              onBlur={(e) => (e.target.style.borderColor = '#1A2E48')}
+              onFocus={(e) => (e.target.style.borderColor = '#00FFA3')}
+              onBlur={(e) => (e.target.style.borderColor = '#e8eaf0')}
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button onClick={replayLast} disabled={!ttsSupported || loading}
-                title="Replay last question" className="gbtn"
+                title="Replay last question"
                 style={{
                   width: 42, height: 42, borderRadius: 10, fontSize: 16,
-                  background: '#0D1828', border: '1.5px solid #1A2E48',
+                  background: '#fff', border: '1.5px solid #e8eaf0',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  opacity: ttsSupported ? 1 : 0.4,
+                  cursor: 'pointer', opacity: ttsSupported ? 1 : 0.4,
                 }}>🔁</button>
-              <button onClick={toggleVoice} className={recording ? 'mic-act' : ''}
+              <button onClick={toggleVoice}
+                className={recording ? 'mic-act' : ''}
                 style={{
                   width: 42, height: 42, borderRadius: 10, fontSize: 18,
-                  background: recording ? '#F8717122' : '#0D1828',
-                  border: `1.5px solid ${recording ? '#F87171' : '#1A2E48'}`,
+                  background: recording ? '#fef2f2' : '#fff',
+                  border: `1.5px solid ${recording ? '#fca5a5' : '#e8eaf0'}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer',
                 }}>
                 {recording ? '⏹' : '🎙️'}
               </button>
-              <button onClick={submit} disabled={loading || !input.trim()} className="pbtn"
+              <button onClick={submit} disabled={loading || !input.trim()}
+                className="pbtn"
                 style={{
                   width: 42, height: 42, borderRadius: 10,
-                  background: 'linear-gradient(135deg,#0060CC,#00A0DC)',
-                  border: 'none', color: '#fff', fontSize: 20,
+                  background: '#00FFA3',
+                  border: 'none', color: '#1A1A24', fontSize: 20,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 800,
                 }}>↑</button>
             </div>
           </div>
-          <div style={{ fontSize: 10, color: '#4A5568', marginTop: 7 }}>
-            {recording ? '🔴 Listening… speak clearly'
+          <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 7 }}>
+            {recording
+              ? '🔴 Listening… speak clearly'
               : `Enter to send · 🎙️ voice input · 🔁 replay · ${ttsSupported ? '🔊 toggles AI voice' : ''}`}
           </div>
         </div>
@@ -449,13 +518,12 @@ Rules:
 
       {done && (
         <div style={{
-          flexShrink: 0, paddingTop: 16, borderTop: '1px solid #1A2A3A',
+          flexShrink: 0, paddingTop: 16, borderTop: '1.5px solid #e8eaf0',
           marginTop: 8, display: 'flex', justifyContent: 'center',
         }}>
           <button onClick={onExit} className="pbtn sg" style={{
-            background: 'linear-gradient(135deg,#0060CC,#00D4FF)',
-            border: 'none', borderRadius: 12, padding: '13px 32px',
-            color: '#fff', fontWeight: 700, fontSize: 14,
+            background: '#00FFA3', border: 'none', borderRadius: 12,
+            padding: '13px 36px', color: '#1A1A24', fontWeight: 800, fontSize: 14,
           }}>
             Back to Dashboard →
           </button>
