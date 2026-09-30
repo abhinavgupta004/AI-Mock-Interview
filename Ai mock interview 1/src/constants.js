@@ -15,4 +15,4 @@ export const MAX_QUESTIONS = 10;
 
 // ⚠️ Replace with your free Groq API key
 export const GROQ_API_KEY = process.env.REACT_APP_GROQ_KEY || '';
-export const GROQ_MODEL = 'llama-3.3-70b-versatile';
+export const GROQ_MODEL = 'llama3-70b-8192';
