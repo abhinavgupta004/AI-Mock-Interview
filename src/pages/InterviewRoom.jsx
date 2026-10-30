@@ -18,7 +18,7 @@ export default function InterviewRoom({ roleId, level, onComplete, onExit }) {
   const [apiError, setApiError] = useState('');
   const [voiceMode, setVoiceMode] = useState(true);
   const [speaking, setSpeaking] = useState(false);
-  const [voices, setVoices] = useState([]);
+  const [, setVoices] = useState([]);
   const [started, setStarted] = useState(false);
   const [candidateSkills, setCandidateSkills] = useState('');
 
